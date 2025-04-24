@@ -335,8 +335,22 @@ if __name__ == '__main__':
     parser.add_argument('--appro_mesh', type=str, default=False)  # appro_mesh
     parser.add_argument('--gt_mask', type=float)
 
-    args = parser.parse_args()
+    # --- Add LR Finder Argument ---
+    parser.add_argument('--find_lr', action='store_true', help='Run Learning Rate Range Test instead of full training')
+    parser.add_argument('--lr_find_min_lr', type=float, default=1e-7, help='Minimum LR for range test')
+    parser.add_argument('--lr_find_max_lr', type=float, default=1.0, help='Maximum LR for range test')
+    parser.add_argument('--lr_find_steps', type=int, default=100, help='Number of steps for LR range test')
+    # --- End LR Finder Arguments ---
 
+    args = parser.parse_args()
+    # --- Check if LR Finder is requested ---
+if args.find_lr:
+    print("Running Learning Rate Range Test...")
+    # Call a function to perform the LR range test
+    run_lr_finder(args) # Pass necessary args like model, data, optimizer setup etc.
+    print("LR Range Test finished. Exiting.")
+    exit() # Exit after the test
+else:
     if args.voxel:
         args, clip_text, obj_file_path, labels = create_voxel_from_mesh(args)
         args.obj_path = obj_file_path
