@@ -246,14 +246,14 @@ def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_trans
         encoded_renders = encoded_renders / encoded_renders.norm(dim=1, keepdim=True)
         if args.clipavg == "view":
             if encoded_text.shape[0] > 1:
-                sim = torch.cosine_similarity(torch.mean(encoded_renders, dim=0),
+                loss = torch.cosine_similarity(torch.mean(encoded_renders, dim=0),
                                                 torch.mean(encoded_text, dim=0), dim=0)
             else:
-                sim = torch.cosine_similarity(torch.mean(encoded_renders, dim=0, keepdim=True),
+                loss = torch.cosine_similarity(torch.mean(encoded_renders, dim=0, keepdim=True),
                                                 encoded_text)
         else:
-            sim = torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
-        loss = -sim    
+            loss = torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
+        
     elif args.n_augs > 0:
         for _ in range(args.n_augs):
             loss = 0.0
@@ -270,49 +270,7 @@ def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_trans
                 loss -= torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
     return loss
 
-def clip_loss2(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model):
-    if args.n_augs == 0: # <<< CASE 1: No Augmentations
-        clip_image = clip_transform(rendered_images)
-        encoded_renders = clip_model.encode_image(clip_image)
-        encoded_renders = encoded_renders / encoded_renders.norm(dim=1, keepdim=True)
-        if args.clipavg == "view":
-            if encoded_text.shape[0] > 1:
-                # Calculates similarity between mean render and mean text
-                loss = torch.cosine_similarity(torch.mean(encoded_renders, dim=0),
-                                                torch.mean(encoded_text, dim=0), dim=0)
-            else:
-                # Calculates similarity between mean render and single text
-                loss = torch.cosine_similarity(torch.mean(encoded_renders, dim=0, keepdim=True),
-                                                encoded_text)
-        else:
-            # Calculates mean similarity between individual renders and text(s)
-            loss = torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
-        # !!!!! PROBLEM: LOSS IS *POSITIVE* SIMILARITY !!!!!
-        # Optimization minimizes loss. Minimizing positive similarity means making embeddings DISSIMILAR.
 
-    elif args.n_augs > 0: # <<< CASE 2: With Augmentations
-        loss = 0.0 # Initialize loss for summing *negative* similarities
-        for _ in range(args.n_augs):
-            augmented_image = augment_transform(rendered_images)
-            encoded_renders = clip_model.encode_image(augmented_image)
-            # Normalization is missing here inside the loop! Should be applied to encoded_renders.
-            # encoded_renders = encoded_renders / encoded_renders.norm(dim=1, keepdim=True) # <<< ADD THIS
-
-            if args.clipavg == "view":
-                if encoded_text.shape[0] > 1:
-                     # Accumulates *NEGATIVE* similarity
-                    sim = torch.cosine_similarity(torch.mean(encoded_renders, dim=0),
-                                                        torch.mean(encoded_text, dim=0), dim=0)
-                else:
-                     # Accumulates *NEGATIVE* similarity
-                    sim = torch.cosine_similarity(torch.mean(encoded_renders, dim=0, keepdim=True),
-                                                        encoded_text)
-            else:
-                 # Accumulates *NEGATIVE* mean similarity
-                sim = torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
-                loss = -sim
-        # Loss here is the sum of negative similarities. Minimizing this MAXIMIZES average similarity.
-    return loss
 def save_renders(dir, i, rendered_images, show=False, name=None):
     if name is not None:
         if not os.path.splitext(name)[1]:
