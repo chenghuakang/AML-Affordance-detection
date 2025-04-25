@@ -167,7 +167,7 @@ def optimize(args):
                                                                 background=background)
 
         # Calculate CLIP Loss
-        loss = clip_loss2(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model)
+        loss = clip_loss(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model)
         loss.backward(retain_graph=True)
 
         optim.step()
@@ -246,13 +246,14 @@ def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_trans
         encoded_renders = encoded_renders / encoded_renders.norm(dim=1, keepdim=True)
         if args.clipavg == "view":
             if encoded_text.shape[0] > 1:
-                loss = torch.cosine_similarity(torch.mean(encoded_renders, dim=0),
+                sim = torch.cosine_similarity(torch.mean(encoded_renders, dim=0),
                                                 torch.mean(encoded_text, dim=0), dim=0)
             else:
-                loss = torch.cosine_similarity(torch.mean(encoded_renders, dim=0, keepdim=True),
+                sim = torch.cosine_similarity(torch.mean(encoded_renders, dim=0, keepdim=True),
                                                 encoded_text)
         else:
-            loss = torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
+            sim = torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
+        loss = -sim    
     elif args.n_augs > 0:
         for _ in range(args.n_augs):
             loss = 0.0
@@ -440,7 +441,7 @@ def run_lr_finder(args):
                                                         return_views=True,
                                                         lighting=True,
                                                         background=background)
-        loss = clip_loss2(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model)
+        loss = clip_loss(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model)
         # --- End Core Step Replication ---
 
         # Check for invalid loss *before* backward pass
