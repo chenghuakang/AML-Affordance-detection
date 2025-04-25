@@ -240,34 +240,56 @@ def save_final_results(args, dir, mesh, mlp, vertices, colors, render, backgroun
         
 
 def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model):
+    loss = 0.0 # Initialize loss
+
     if args.n_augs == 0:
         clip_image = clip_transform(rendered_images)
         encoded_renders = clip_model.encode_image(clip_image)
         encoded_renders = encoded_renders / encoded_renders.norm(dim=1, keepdim=True)
+
         if args.clipavg == "view":
+            # Average image embeddings first, then compare to (potentially averaged) text embedding
+            mean_encoded_renders = torch.mean(encoded_renders, dim=0, keepdim=True)
             if encoded_text.shape[0] > 1:
-                loss = torch.cosine_similarity(torch.mean(encoded_renders, dim=0),
-                                                torch.mean(encoded_text, dim=0), dim=0)
+                mean_encoded_text = torch.mean(encoded_text, dim=0, keepdim=True)
+                similarity = torch.cosine_similarity(mean_encoded_renders, mean_encoded_text, dim=1) # Keep batch dim if needed
             else:
-                loss = torch.cosine_similarity(torch.mean(encoded_renders, dim=0, keepdim=True),
-                                                encoded_text)
+                similarity = torch.cosine_similarity(mean_encoded_renders, encoded_text, dim=1) # Keep batch dim if needed
+            # loss = 1.0 - similarity.mean() # Average similarity if multiple text prompts were averaged
+            loss = -similarity.mean() # Use negative similarity
         else:
-            loss = torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
-        
+            # Compare each view to text embedding(s), then average similarities
+            # Handle potential broadcasting if multiple text prompts exist
+            similarity = torch.cosine_similarity(encoded_renders, encoded_text) # Check broadcasting shapes if encoded_text.shape[0] > 1
+            # loss = 1.0 - torch.mean(similarity)
+            loss = -torch.mean(similarity) # Use negative similarity
+
     elif args.n_augs > 0:
+        accumulated_loss = 0.0 # Initialize accumulator *before* the loop
         for _ in range(args.n_augs):
-            loss = 0.0
             augmented_image = augment_transform(rendered_images)
             encoded_renders = clip_model.encode_image(augmented_image)
+            encoded_renders = encoded_renders / encoded_renders.norm(dim=1, keepdim=True) # Normalize augmented embeddings
+
+            current_iter_loss = 0.0
             if args.clipavg == "view":
+                mean_encoded_renders = torch.mean(encoded_renders, dim=0, keepdim=True)
                 if encoded_text.shape[0] > 1:
-                    loss -= torch.cosine_similarity(torch.mean(encoded_renders, dim=0),
-                                                        torch.mean(encoded_text, dim=0), dim=0)
+                    mean_encoded_text = torch.mean(encoded_text, dim=0, keepdim=True)
+                    similarity = torch.cosine_similarity(mean_encoded_renders, mean_encoded_text, dim=1)
                 else:
-                    loss -= torch.cosine_similarity(torch.mean(encoded_renders, dim=0, keepdim=True),
-                                                        encoded_text)
+                    similarity = torch.cosine_similarity(mean_encoded_renders, encoded_text, dim=1)
+                # current_iter_loss = 1.0 - similarity.mean()
+                current_iter_loss = -similarity.mean() # Use negative similarity
             else:
-                loss -= torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
+                similarity = torch.cosine_similarity(encoded_renders, encoded_text)
+                # current_iter_loss = 1.0 - torch.mean(similarity)
+                current_iter_loss = -torch.mean(similarity) # Use negative similarity
+
+            accumulated_loss += current_iter_loss # Accumulate the loss from this augmentation
+
+        loss = accumulated_loss / args.n_augs # Average the loss over all augmentations
+
     return loss
 
 
