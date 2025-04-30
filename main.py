@@ -238,7 +238,7 @@ def save_final_results(args, dir, mesh, mlp, vertices, colors, render, backgroun
         mesh.export(os.path.join(dir, f"{objbase}_{args.classes[0]}.ply"), extension="ply", color=final_color)
         save_renders(dir, 0, rendered_images, show=True, name='final_render.jpg')
         
-
+”“”
 def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model):
     if args.n_augs == 0:
         clip_image = clip_transform(rendered_images)
@@ -267,6 +267,57 @@ def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_trans
                                                         encoded_text)
             else:
                 loss -= torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
+    return loss
+“”“
+def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model):
+    if args.n_augs == 0:
+        clip_image = clip_transform(rendered_images)
+        encoded_renders = clip_model.encode_image(clip_image)
+        # Normalize image embeddings
+        encoded_renders = encoded_renders / encoded_renders.norm(dim=1, keepdim=True)
+
+        if args.clipavg == "view":
+            avg_encoded_renders = torch.mean(encoded_renders, dim=0, keepdim=True)
+            if encoded_text.shape[0] > 1:
+                avg_encoded_text = torch.mean(encoded_text, dim=0, keepdim=True) 
+                # Calculate similarity
+                similarity = torch.cosine_similarity(avg_encoded_renders, avg_encoded_text, dim=-1)
+            else:
+                # Calculate similarity
+                similarity = torch.cosine_similarity(avg_encoded_renders, encoded_text, dim=-1)
+        else: 
+            similarity = torch.cosine_similarity(encoded_renders, encoded_text, dim=-1)
+            similarity = torch.mean(similarity)
+
+        # Calculate loss as 1 - similarity
+        loss = 1.0 - similarity 
+
+    elif args.n_augs > 0:
+        for i in range(args.n_augs):
+            loss = 0.0 # Original code resets loss here in each iteration
+            augmented_image = augment_transform(rendered_images)
+            clip_augmented_image = clip_transform(augmented_image)
+            encoded_renders = clip_model.encode_image(clip_augmented_image)
+            encoded_renders = encoded_renders / encoded_renders.norm(dim=1, keepdim=True)
+
+            if args.clipavg == "view":
+                avg_encoded_renders = torch.mean(encoded_renders, dim=0, keepdim=True) # Keep dim
+                if encoded_text.shape[0] > 1:
+                    avg_encoded_text = torch.mean(encoded_text, dim=0, keepdim=True) # Keep dim
+                    # Calculate similarity
+                    similarity = torch.cosine_similarity(avg_encoded_renders, avg_encoded_text, dim=-1) # Use last dim
+                else:
+                    similarity = torch.cosine_similarity(avg_encoded_renders, encoded_text, dim=-1) # Use last dim
+            else: # Average similarity across views/renders
+                 # Calculate similarity per render
+                similarity = torch.cosine_similarity(encoded_renders, encoded_text, dim=-1) # Use last dim
+                # Average the similarities
+                similarity = torch.mean(similarity)
+            current_aug_loss = 1.0 - similarity
+            loss = current_aug_loss 
+    if isinstance(loss, torch.Tensor) and loss.numel() == 1:
+        loss = loss.squeeze()
+
     return loss
 def save_renders(dir, i, rendered_images, show=False, name=None):
     if name is not None:
