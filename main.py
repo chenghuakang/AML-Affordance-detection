@@ -238,7 +238,7 @@ def save_final_results(args, dir, mesh, mlp, vertices, colors, render, backgroun
         mesh.export(os.path.join(dir, f"{objbase}_{args.classes[0]}.ply"), extension="ply", color=final_color)
         save_renders(dir, 0, rendered_images, show=True, name='final_render.jpg')
         
-”“”
+‘’‘
 def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model):
     if args.n_augs == 0:
         clip_image = clip_transform(rendered_images)
@@ -268,7 +268,7 @@ def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_trans
             else:
                 loss -= torch.mean(torch.cosine_similarity(encoded_renders, encoded_text))
     return loss
-“”“
+’‘’
 def clip_loss(args, rendered_images, encoded_text, clip_transform, augment_transform, clip_model):
     if args.n_augs == 0:
         clip_image = clip_transform(rendered_images)
